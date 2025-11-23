@@ -454,6 +454,113 @@
   </div>
 
   <script>
+    // Ringtone Player Class
+    class RingtonePlayer {
+      constructor() {
+        this.audioContext = null;
+        this.gainNode = null;
+        this.isPlaying = false;
+        this.intervalId = null;
+        this.type = 'incoming'; // 'incoming' or 'outgoing'
+      }
+
+      playIncoming() {
+        this.type = 'incoming';
+        this.play();
+      }
+
+      playOutgoing() {
+        this.type = 'outgoing';
+        this.play();
+      }
+
+      play() {
+        if (this.isPlaying) return;
+        
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.gainNode = this.audioContext.createGain();
+        this.gainNode.connect(this.audioContext.destination);
+        this.gainNode.gain.value = 0.3;
+        
+        this.isPlaying = true;
+        this.playRingtonePattern();
+      }
+
+      playRingtonePattern() {
+        if (!this.isPlaying) return;
+
+        if (this.type === 'incoming') {
+          // Incoming call: Bell sound (chime pattern)
+          // Play a series of bell-like tones
+          this.playBell(523.25, 0.15, 0);      // C5
+          this.playBell(659.25, 0.15, 0.15);   // E5
+          this.playBell(783.99, 0.15, 0.30);   // G5
+          this.playBell(1046.50, 0.2, 0.45);   // C6 (sustain)
+          
+          // Repeat every 3 seconds
+          this.intervalId = setTimeout(() => {
+            if (this.isPlaying) {
+              this.playRingtonePattern();
+            }
+          }, 3000);
+        } else {
+          // Outgoing call: Soft bell tone
+          this.playBell(659.25, 0.5, 0);
+          this.playBell(783.99, 0.5, 0.6);
+          
+          // Repeat every 3 seconds
+          this.intervalId = setTimeout(() => {
+            if (this.isPlaying) {
+              this.playRingtonePattern();
+            }
+          }, 3000);
+        }
+      }
+
+      playBell(frequency, duration, delay) {
+        const startTime = this.audioContext.currentTime + delay;
+        const oscillator = this.audioContext.createOscillator();
+        const beepGain = this.audioContext.createGain();
+        
+        oscillator.connect(beepGain);
+        beepGain.connect(this.gainNode);
+        
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+        
+        // Bell-like envelope: quick attack, exponential decay
+        beepGain.gain.setValueAtTime(0, startTime);
+        beepGain.gain.linearRampToValueAtTime(0.4, startTime + 0.01);
+        beepGain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      }
+
+      playBeep(frequency, duration, delay) {
+        // Keep old method for compatibility
+        this.playBell(frequency, duration, delay);
+      }
+
+      stop() {
+        this.isPlaying = false;
+        if (this.intervalId) {
+          clearTimeout(this.intervalId);
+          this.intervalId = null;
+        }
+        if (this.gainNode) {
+          this.gainNode.gain.value = 0;
+        }
+        if (this.audioContext) {
+          this.audioContext.close();
+          this.audioContext = null;
+        }
+      }
+    }
+
+    // Global ringtone instance
+    const ringtonePlayer = new RingtonePlayer();
+
     // Global variables
     let currentUser = null;
     let ws = null;
@@ -566,6 +673,9 @@
           break;
           
         case 'call_ended':
+          // Stop ringtone if playing
+          ringtonePlayer.stop();
+          
           // Other user hung up, close our end
           if (localStream) {
             localStream.getTracks().forEach(track => track.stop());
@@ -1005,6 +1115,9 @@
       if (!selectedFriend) return;
 
       try {
+        // Play outgoing ringing tone
+        ringtonePlayer.playOutgoing();
+        
         updateCallStatus('calling', 'Initiating call...');
         
         // Create peer connection with STUN server for local testing
@@ -1055,6 +1168,10 @@
         if (data.success) {
           currentCallSession = data.sessionId;
           updateCallStatus('calling', 'Waiting for answer...');
+          
+          // Enable hangup button so user can cancel the call
+          document.getElementById('hangupBtn').disabled = false;
+          document.getElementById('startCallBtn').disabled = true;
         }
 
       } catch (error) {
@@ -1066,6 +1183,9 @@
 
     async function startMediaAndOffer() {
       try {
+        // Stop ringing tone when call connects
+        ringtonePlayer.stop();
+        
         updateCallStatus('connecting', 'Starting voice call...');
         
         // Get local media (audio only)
@@ -1205,6 +1325,9 @@
 
     async function handleAnswer(answer) {
       try {
+        // Stop ringing tone when call is answered
+        ringtonePlayer.stop();
+        
         await pc.setRemoteDescription(answer);
         updateCallStatus('connected', 'Call connected!');
       } catch (error) {
@@ -1225,6 +1348,9 @@
       // Set the caller as selected friend
       selectedFriend = { id: callerId };
       
+      // Play incoming ringtone
+      ringtonePlayer.playIncoming();
+      
       // Try to get caller name from friends list or fetch it
       let callerName = 'Unknown';
       try {
@@ -1242,9 +1368,15 @@
       document.getElementById('callerName').textContent = callerName;
       document.getElementById('incomingCall').classList.remove('hidden');
       updateCallStatus('incoming', 'Incoming call...');
+      
+      // Enable hangup button for incoming call too
+      document.getElementById('hangupBtn').disabled = false;
     }
 
     async function acceptCall() {
+      // Stop ringtone
+      ringtonePlayer.stop();
+      
       document.getElementById('incomingCall').classList.add('hidden');
       
       // If session exists, accept it via API and notify caller
@@ -1360,6 +1492,9 @@
     }
 
     function declineCall() {
+      // Stop ringtone
+      ringtonePlayer.stop();
+      
       document.getElementById('incomingCall').classList.add('hidden');
       updateCallStatus('idle', 'Call declined');
       resetCallState();
@@ -1384,6 +1519,9 @@
     }
 
     function hangup() {
+      // Stop ringtone if playing
+      ringtonePlayer.stop();
+      
       if (currentCallSession && selectedFriend) {
         // Notify other user via WebSocket
         if (ws && ws.readyState === WebSocket.OPEN) {
