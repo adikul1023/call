@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WebRTC Call Demo v0.3</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      text-align: center;
+      padding: 20px;
+    }
+    textarea {
+      width: 90%;
+      height: 120px;
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: #222;
+      color: #eee;
+    }
+    button {
+      margin: 8px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background: #444;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover { background: #666; }
+    button:disabled { 
+      background: #333; 
+      color: #666; 
+      cursor: not-allowed; 
+    }
+    video {
+      width: 40%;
+      margin: 10px;
+      border-radius: 10px;
+      background: black;
+    }
+    #stepContainer > div { display: none; }
+    #callNotification {
+      display: none;
+      background: #333;
+      border: 2px solid #666;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .call-status {
+      font-size: 18px;
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .status-waiting { background: #444; }
+    .status-calling { background: #664; }
+    .status-connected { background: #464; }
+  </style>
+</head>
+<body>
+  <h2>WebRTC Call Demo v0.3</h2>
+
+  <div id="stepChoice">
+    <p>Are you starting the call or answering one?</p>
+    <button onclick="chooseRole('offerer')">I want to send an Offer</button>
+    <button onclick="chooseRole('answerer')">I already have an Offer</button>
+  </div>
+
+  <div id="stepContainer">
+    <!-- Offerer flow -->
+    <div id="offererStep">
+      <button onclick="createOffer()">Create Offer</button>
+      <p>Share this Offer:</p>
+      <textarea id="offerOut" readonly></textarea>
+      <p>Paste Answer from peer:</p>
+      <textarea id="answerIn"></textarea>
+      <button onclick="applyAnswer()">Apply Answer</button>
+    </div>
+
+    <!-- Answerer flow -->
+    <div id="answererStep">
+      <p>Paste Offer from peer:</p>
+      <textarea id="offerIn"></textarea>
+      <button onclick="generateAnswer()">Generate Answer</button>
+      <p>Share this Answer:</p>
+      <textarea id="answerOut" readonly></textarea>
+    </div>
+  </div>
+
+  <!-- Call Status -->
+  <div id="callStatus" class="call-status status-waiting" style="display: none;">
+    <span id="statusText">Ready to call</span>
+  </div>
+
+  <!-- Incoming Call Notification -->
+  <div id="callNotification">
+    <h3>📞 Incoming Call</h3>
+    <p>Someone wants to start a call with you</p>
+    <button onclick="acceptCall()" style="background: #464;">Accept Call</button>
+    <button onclick="declineCall()" style="background: #644;">Decline Call</button>
+  </div>
+
+  <!-- Manual Call Invite Exchange (copy/paste, no signaling server) -->
+  <h3>Call Invite</h3>
+  <div id="inviteSection">
+    <div>
+      <p>Share this Call Invite (after clicking Initiate Call):</p>
+      <textarea id="inviteOut" readonly></textarea>
+    </div>
+    <div>
+      <p>Paste Call Invite from peer:</p>
+      <textarea id="inviteIn"></textarea>
+      <button onclick="receiveCallInvite()">Apply Call Invite</button>
+    </div>
+  </div>
+
+  <h3>Call Controls</h3>
+  <div id="callControls">
+    <button onclick="initiateCall()" id="initiateCallBtn">Initiate Call</button>
+    <button onclick="startVoice()" id="voiceBtn" disabled>Voice Only</button>
+    <button onclick="startVideo()" id="videoBtn" disabled>Video Call</button>
+    <button onclick="hangup()" id="hangupBtn" disabled>Hang Up</button>
+  </div>
+  <div>
+    <video id="localVideo" autoplay muted playsinline style="display: none;"></video>
+    <video id="remoteVideo" autoplay playsinline style="display: none;"></video>
+  </div>
+
+<script>
+let pc;
+let localStream;
+let role;
+let callState = 'idle'; // 'idle', 'initiating', 'incoming', 'connected'
+let callAccepted = false;
+let dc; // data channel for control messages
+let isCleaningUp = false; // prevent duplicate cleanup
+
+async function initPeer() {
+  pc = new RTCPeerConnection();
+  pc.ontrack = (e) => {
+    document.getElementById("remoteVideo").srcObject = e.streams[0];
+  };
+  pc.ondatachannel = (event) => {
+    console.log("Received data channel", event.channel?.label);
+    dc = event.channel;
+    setupDataChannel(dc);
+  };
+  pc.onconnectionstatechange = () => {
+    console.log("PC state:", pc.connectionState);
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+      safeCleanup(false);
+    }
+  };
+}
+
+// Step choice
+function chooseRole(selected) {
+  role = selected;
+  document.getElementById("stepChoice").style.display = "none";
+  document.querySelectorAll("#stepContainer > div").forEach(d => d.style.display="none");
+  document.getElementById(role+"Step").style.display = "block";
+  initPeer();
+}
+
+// Offerer flow
+async function createOffer() {
+  try {
+    console.log("Creating offer...");
+    await ensureLocalStream();
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    if (!dc) {
+      dc = pc.createDataChannel('control');
+      setupDataChannel(dc);
+    }
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    document.getElementById("offerOut").value = JSON.stringify(offer);
+    console.log("Offer created successfully!");
+  } catch (error) {
+    console.error("Error creating offer:", error);
+    alert("Error creating offer: " + error.message);
+  }
+}
+
+async function applyAnswer() {
+  try {
+    console.log("Applying answer...");
+    const answerText = document.getElementById("answerIn").value.trim();
+    if (!answerText) {
+      alert("Please paste an answer first!");
+      return;
+    }
+    
+    const answer = JSON.parse(answerText);
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    console.log("Answer applied successfully!");
+    alert("Answer applied! You can now initiate a call when ready.");
+    callState = 'ready'; // Set call state to ready
+    updateCallStatus('ready', 'Ready to initiate call');
+  } catch (error) {
+    console.error("Error applying answer:", error);
+    alert("Error applying answer: " + error.message);
+  }
+}
+
+// Answerer flow
+async function generateAnswer() {
+  try {
+    console.log("Starting answer generation...");
+    
+    // Get and parse the offer
+    const offerText = document.getElementById("offerIn").value.trim();
+    if (!offerText) {
+      alert("Please paste an offer first!");
+      return;
+    }
+    
+    console.log("Parsing offer...");
+    const offer = JSON.parse(offerText);
+    console.log("Offer parsed successfully:", offer);
+    
+    // Set remote description
+    console.log("Setting remote description...");
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log("Remote description set successfully");
+
+    // Get local media stream
+    console.log("Getting local stream...");
+    await ensureLocalStream();
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    console.log("Local tracks added to peer connection");
+
+    // Create answer
+    console.log("Creating answer...");
+    const answer = await pc.createAnswer();
+    console.log("Answer created:", answer);
+    
+    // Set local description
+    console.log("Setting local description...");
+    await pc.setLocalDescription(answer);
+    console.log("Local description set successfully");
+
+    // Wait for ICE gathering to complete (with timeout)
+    console.log("Waiting for ICE gathering to complete...");
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        console.log("ICE gathering timeout, proceeding anyway");
+        resolve();
+      }, 5000); // 5 second timeout
+      
+      if (pc.iceGatheringState === "complete") {
+        clearTimeout(timeout);
+        resolve();
+      } else {
+        function checkState() {
+          console.log("ICE gathering state:", pc.iceGatheringState);
+          if (pc.iceGatheringState === "complete") {
+            pc.removeEventListener("icegatheringstatechange", checkState);
+            clearTimeout(timeout);
+            resolve();
+          }
+        }
+        pc.addEventListener("icegatheringstatechange", checkState);
+      }
+    });
+
+    // Display the answer
+    console.log("Displaying answer...");
+    document.getElementById("answerOut").value = JSON.stringify(pc.localDescription);
+    console.log("Answer generation completed successfully!");
+    callState = 'ready'; // Set call state to ready
+    updateCallStatus('ready', 'Ready to receive calls');
+    
+  } catch (error) {
+    console.error("Error generating answer:", error);
+    alert("Error generating answer: " + error.message);
+  }
+}
+
+// Media setup
+async function ensureLocalStream() {
+  if (!localStream) {
+    localStream = await navigator.mediaDevices.getUserMedia({audio: true, video: true});
+    document.getElementById("localVideo").srcObject = localStream;
+    // Disable both audio and video by default - only enable when call is accepted
+    localStream.getVideoTracks().forEach(track => track.enabled = false);
+    localStream.getAudioTracks().forEach(track => track.enabled = false);
+  }
+}
+
+// Call initiation and acceptance
+async function initiateCall() {
+  if (callState !== 'ready') {
+    alert("Please complete the SDP exchange first!");
+    return;
+  }
+  
+  try {
+    console.log("Initiating call...");
+    callState = 'initiating';
+    updateCallStatus('calling', 'Calling...');
+    
+    // Generate a manual call invite payload to copy/paste to the peer
+    const invite = {
+      type: 'call_invite',
+      timestamp: Date.now(),
+      fromRole: role
+    };
+    document.getElementById("inviteOut").value = JSON.stringify(invite);
+    alert("Call invite generated. Copy it and send to your peer. They must paste it and click 'Apply Call Invite'.");
+    
+    // Enable call controls for the caller
+    document.getElementById("voiceBtn").disabled = false;
+    document.getElementById("videoBtn").disabled = false;
+    document.getElementById("hangupBtn").disabled = false;
+    document.getElementById("initiateCallBtn").disabled = true;
+    
+    // Show local video element
+    document.getElementById("localVideo").style.display = "block";
+    
+    console.log("Call initiated successfully!");
+  } catch (error) {
+    console.error("Error initiating call:", error);
+    alert("Error initiating call: " + error.message);
+  }
+}
+
+function receiveCallInvite() {
+  try {
+    const inviteText = document.getElementById("inviteIn").value.trim();
+    if (!inviteText) {
+      alert("Please paste a Call Invite first!");
+      return;
+    }
+    const invite = JSON.parse(inviteText);
+    if (invite.type !== 'call_invite') {
+      alert("Invalid invite payload.");
+      return;
+    }
+    console.log("Received call invite:", invite);
+    document.getElementById("callNotification").style.display = "block";
+    updateCallStatus('incoming', 'Incoming call...');
+  } catch (error) {
+    console.error("Error applying call invite:", error);
+    alert("Error applying call invite: " + error.message);
+  }
+}
+
+function acceptCall() {
+  try {
+    console.log("Accepting call...");
+    callState = 'connected';
+    callAccepted = true;
+    
+    // Hide notification
+    document.getElementById("callNotification").style.display = "none";
+    
+    // Enable audio
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => track.enabled = true);
+    }
+    
+    // Show local video element
+    document.getElementById("localVideo").style.display = "block";
+    
+    // Enable call controls
+    document.getElementById("voiceBtn").disabled = false;
+    document.getElementById("videoBtn").disabled = false;
+    document.getElementById("hangupBtn").disabled = false;
+    document.getElementById("initiateCallBtn").disabled = true;
+    
+    updateCallStatus('connected', 'Call Connected');
+    console.log("Call accepted successfully!");
+  } catch (error) {
+    console.error("Error accepting call:", error);
+    alert("Error accepting call: " + error.message);
+  }
+}
+
+function declineCall() {
+  try {
+    console.log("Declining call...");
+    callState = 'idle';
+    
+    // Hide notification
+    document.getElementById("callNotification").style.display = "none";
+    
+    updateCallStatus('ready', 'Call declined');
+    console.log("Call declined");
+  } catch (error) {
+    console.error("Error declining call:", error);
+  }
+}
+
+// Call controls
+async function startVoice() {
+  if (!localStream) await ensureLocalStream();
+  // Only audio tracks
+  localStream.getVideoTracks().forEach(track => track.enabled = false);
+  localStream.getAudioTracks().forEach(track => track.enabled = true);
+  
+  // Hide video elements
+  document.getElementById("localVideo").style.display = "none";
+  document.getElementById("remoteVideo").style.display = "none";
+  
+  console.log("Voice-only call started");
+}
+
+async function startVideo() {
+  if (!localStream) await ensureLocalStream();
+  // Enable both audio and video
+  localStream.getVideoTracks().forEach(track => track.enabled = true);
+  localStream.getAudioTracks().forEach(track => track.enabled = true);
+  
+  // Show video elements
+  document.getElementById("localVideo").style.display = "block";
+  document.getElementById("remoteVideo").style.display = "block";
+  
+  console.log("Video call started");
+}
+
+function hangup() {
+  try {
+    console.log("Hanging up call...");
+    if (dc && dc.readyState === 'open') {
+      try { dc.send(JSON.stringify({ type: 'hangup' })); } catch (e) {}
+    }
+    safeCleanup(true);
+  } catch (error) {
+    console.error("Error hanging up:", error);
+    alert("Error hanging up: " + error.message);
+  }
+}
+
+// Helper function to update call status
+function updateCallStatus(status, text) {
+  const statusElement = document.getElementById("callStatus");
+  const textElement = document.getElementById("statusText");
+  
+  statusElement.className = `call-status status-${status}`;
+  textElement.textContent = text;
+  statusElement.style.display = "block";
+}
+
+function setupDataChannel(channel) {
+  channel.onopen = () => console.log('DC open');
+  channel.onclose = () => console.log('DC closed');
+  channel.onerror = (e) => console.error('DC error', e);
+  channel.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'hangup') {
+        console.log('Remote requested hangup');
+        safeCleanup(false);
+      }
+    } catch (_) {
+      console.log('DC message', e.data);
+    }
+  };
+}
+
+function safeCleanup(showAlert) {
+  if (isCleaningUp) return;
+  isCleaningUp = true;
+  try {
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+    if (dc) {
+      try { dc.close(); } catch (_) {}
+      dc = null;
+    }
+    if (pc) {
+      try { pc.close(); } catch (_) {}
+      pc = null;
+    }
+    document.getElementById("localVideo").style.display = "none";
+    document.getElementById("remoteVideo").style.display = "none";
+    document.getElementById("localVideo").srcObject = null;
+    document.getElementById("remoteVideo").srcObject = null;
+    document.getElementById("callNotification").style.display = "none";
+    document.getElementById("initiateCallBtn").disabled = false;
+    document.getElementById("voiceBtn").disabled = true;
+    document.getElementById("videoBtn").disabled = true;
+    document.getElementById("hangupBtn").disabled = true;
+    callState = 'idle';
+    callAccepted = false;
+    updateCallStatus('idle', 'Ready to call');
+    console.log('Cleanup completed');
+    if (showAlert) alert('Call ended');
+  } finally {
+    isCleaningUp = false;
+  }
+}
+</script>
+</body>
+</html>

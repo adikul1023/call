@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  securevoice:
+    build: .
+    container_name: securevoice-vpn
+    image: securevoice:latest
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      # Server Configuration
+      - NODE_ENV=production
+      - BIND_IP=10.0.0.1
+      - PORT=3000
+      
+      # WireGuard Configuration
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - SERVERURL=auto
+      - SERVERPORT=51820
+      - PEERS=2
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.0.0.0/24
+      - ALLOWEDIPS=10.0.0.0/24
+      
+      # Google Cloud Optimizations
+      - MEMORY_LIMIT=768m
+      
+      # WireGuard Keys (generated on first run, override for production)
+      # - WG_PRIVATE_KEY=<your_private_key>
+      # - PEER1_PUBLIC_KEY=<peer1_public_key>
+      # - PEER2_PUBLIC_KEY=<peer2_public_key>
+    
+    volumes:
+      # WireGuard configuration and keys (persistent)
+      - ./wireguard-config:/config
+      
+      # Database persistence
+      - ./data:/app/data
+      
+      # Logs
+      - ./logs:/app/logs
+    
+    ports:
+      # WireGuard VPN port (must be exposed to internet for initial handshake)
+      - "51820:51820/udp"
+      
+      # Signaling server (only accessible via VPN, but mapped for local testing)
+      # Remove this port mapping in production to force VPN-only access
+      - "3000:3000"
+    
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+    
+    restart: unless-stopped
+    
+    networks:
+      vpn_network:
+        ipv4_address: 10.0.0.1
+
+networks:
+  vpn_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+          gateway: 10.0.0.1

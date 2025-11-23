@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Test - SecureVoice</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 15px;
+      padding: 40px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+    .audio-visualizer {
+      width: 100%;
+      height: 100px;
+      background: #f0f0f0;
+      border-radius: 10px;
+      margin: 20px 0;
+      position: relative;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 10px;
+      transition: transform 0.2s ease;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status {
+      margin: 20px 0;
+      padding: 15px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+    }
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .status.info {
+      background: #d1ecf1;
+      color: #0c5460;
+    }
+    .info-box {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .info-box h3 {
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+    .info-box ul {
+      margin-left: 20px;
+    }
+    .info-box li {
+      margin: 5px 0;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎤 Audio Test</h1>
+    <p class="subtitle">Test your microphone and audio playback</p>
+    
+    <div id="status" class="status info">
+      Click "Start Test" to check your microphone
+    </div>
+    
+    <div class="audio-visualizer">
+      <canvas id="visualizer"></canvas>
+    </div>
+    
+    <div>
+      <button id="startBtn" class="btn" onclick="startTest()">🎤 Start Test</button>
+      <button id="stopBtn" class="btn" onclick="stopTest()" disabled>⏹️ Stop Test</button>
+      <button id="playbackBtn" class="btn" onclick="togglePlayback()" disabled>🔊 Hear Yourself</button>
+    </div>
+    
+    <div class="info-box">
+      <h3>How to Test:</h3>
+      <ul>
+        <li><strong>Step 1:</strong> Click "Start Test" and allow microphone access</li>
+        <li><strong>Step 2:</strong> Speak and watch the audio visualizer move</li>
+        <li><strong>Step 3:</strong> Click "Hear Yourself" to test playback (you'll hear your voice with a slight delay)</li>
+        <li><strong>Step 4:</strong> If both work, your setup is ready for SecureVoice calls!</li>
+      </ul>
+    </div>
+    
+    <div style="margin-top: 20px;">
+      <a href="/" style="color: #667eea; text-decoration: none; font-weight: 600;">← Back to SecureVoice</a>
+    </div>
+  </div>
+
+  <script>
+    let audioContext;
+    let analyser;
+    let microphone;
+    let stream;
+    let canvas;
+    let canvasContext;
+    let animationId;
+    let playbackEnabled = false;
+    let audioDestination;
+
+    function showStatus(message, type) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.textContent = message;
+      statusDiv.className = `status ${type}`;
+    }
+
+    async function startTest() {
+      try {
+        showStatus('Requesting microphone access...', 'info');
+        
+        // Request microphone with enhanced audio settings
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        
+        showStatus('✅ Microphone active! Speak to see the visualizer move.', 'success');
+        
+        // Setup audio context
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+        
+        analyser.fftSize = 256;
+        microphone.connect(analyser);
+        
+        // Setup canvas
+        canvas = document.getElementById('visualizer');
+        canvasContext = canvas.getContext('2d');
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        // Start visualization
+        visualize();
+        
+        // Enable buttons
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        document.getElementById('playbackBtn').disabled = false;
+        
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        showStatus('❌ Error: ' + error.message + '. Please allow microphone access.', 'error');
+      }
+    }
+
+    function visualize() {
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      function draw() {
+        animationId = requestAnimationFrame(draw);
+        
+        analyser.getByteFrequencyData(dataArray);
+        
+        canvasContext.fillStyle = '#f0f0f0';
+        canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const barWidth = (canvas.width / bufferLength) * 2.5;
+        let barHeight;
+        let x = 0;
+        
+        for (let i = 0; i < bufferLength; i++) {
+          barHeight = (dataArray[i] / 255) * canvas.height;
+          
+          const gradient = canvasContext.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
+          gradient.addColorStop(0, '#667eea');
+          gradient.addColorStop(1, '#764ba2');
+          
+          canvasContext.fillStyle = gradient;
+          canvasContext.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+          
+          x += barWidth + 1;
+        }
+      }
+      
+      draw();
+    }
+
+    function togglePlayback() {
+      if (!playbackEnabled) {
+        // Enable playback (you'll hear yourself with slight delay)
+        audioDestination = audioContext.createMediaStreamDestination();
+        microphone.connect(audioDestination);
+        
+        const audio = new Audio();
+        audio.srcObject = audioDestination.stream;
+        audio.play();
+        
+        playbackEnabled = true;
+        document.getElementById('playbackBtn').textContent = '🔇 Stop Playback';
+        showStatus('🔊 Playback enabled! You should hear yourself speak.', 'success');
+      } else {
+        // Disable playback
+        if (audioDestination) {
+          microphone.disconnect(audioDestination);
+          audioDestination = null;
+        }
+        playbackEnabled = false;
+        document.getElementById('playbackBtn').textContent = '🔊 Hear Yourself';
+        showStatus('🔇 Playback stopped.', 'info');
+      }
+    }
+
+    function stopTest() {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      
+      if (audioContext) {
+        audioContext.close();
+      }
+      
+      // Clear canvas
+      if (canvasContext) {
+        canvasContext.fillStyle = '#f0f0f0';
+        canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // Reset state
+      playbackEnabled = false;
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+      document.getElementById('playbackBtn').disabled = true;
+      document.getElementById('playbackBtn').textContent = '🔊 Hear Yourself';
+      
+      showStatus('Test stopped. Click "Start Test" to test again.', 'info');
+    }
+  </script>
+</body>
+</html>

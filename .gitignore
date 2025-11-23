@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# SSL Certificates (keep private!)
+*.pem
+*.pfx
+*.key
+*.crt
+
+# Database
+*.db
+*.db-journal
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes and configs
+wireguard-config/
+data/
+logs/

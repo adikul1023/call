@@ -1,0 +1,13 @@
+[Interface]
+PrivateKey = ${WG_PRIVATE_KEY}
+Address = ${BIND_IP}/24
+ListenPort = ${SERVERPORT}
+
+# Post-up rules to allow forwarding
+PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+# Peers will be added here after key exchange
+# [Peer]
+# PublicKey = <peer_public_key>
+# AllowedIPs = 10.0.0.2/32
