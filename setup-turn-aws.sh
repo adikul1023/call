@@ -29,13 +29,13 @@ if [ -z "$TURN_REALM" ]; then
   TURN_REALM="$(curl -fsS http://169.254.169.254/latest/meta-data/public-ipv4 || true)"
 fi
 if [ -z "$TURN_REALM" ]; then
-  TURN_REALM="$(hostname -I | awk '{print $1}')"
-fi
-if [ -z "$TURN_REALM" ]; then
-  echo "Could not determine public IP/realm. Set TURN_REALM and rerun."
+  echo "Could not determine public IP/realm. Set TURN_REALM to your EC2 public IP and rerun."
   exit 1
 fi
 
+if [ -z "$PRIVATE_IP" ]; then
+  PRIVATE_IP="$(curl -fsS http://169.254.169.254/latest/meta-data/local-ipv4 || true)"
+fi
 if [ -z "$PRIVATE_IP" ]; then
   PRIVATE_IP="$(hostname -I | awk '{print $1}')"
 fi
