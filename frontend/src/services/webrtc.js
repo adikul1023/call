@@ -20,9 +20,12 @@ class WebRTCService {
   async initialize(tunnelIP) {
     this.tunnelIP = tunnelIP;
     
-    // Create peer connection with NO STUN servers (tunnel-only)
+    // Create peer connection with public STUN fallback for internet testing.
     this.pc = new RTCPeerConnection({
-      iceServers: []  // Empty = only local/VPN candidates
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
     });
     
     // Handle incoming tracks
@@ -90,7 +93,7 @@ class WebRTCService {
       }
     };
     
-    console.log('✅ WebRTC initialized (tunnel-only mode)');
+    console.log('✅ WebRTC initialized (STUN-enabled mode)');
   }
 
   /**

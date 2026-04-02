@@ -1122,10 +1122,12 @@
         
         updateCallStatus('calling', 'Initiating call...');
         
-        // Create peer connection - VPN-only mode (no public STUN servers)
-        // ICE candidates will use only local/VPN IPs (10.0.0.x)
+        // Create peer connection with STUN fallback for internet NAT traversal.
         pc = new RTCPeerConnection({
-          iceServers: []  // Empty = local candidates only, perfect for WireGuard VPN
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
         });
 
         // Set up event handlers
@@ -1254,7 +1256,10 @@
         // If we don't have a peer connection yet, create one
         if (!pc) {
           pc = new RTCPeerConnection({
-            iceServers: []  // VPN-only mode - no public STUN servers
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' }
+            ]
           });
 
           pc.ontrack = (event) => {
@@ -1429,9 +1434,12 @@
       try {
         updateCallStatus('calling', 'Auto-connecting call...');
         
-        // Create peer connection - VPN-only mode
+        // Create peer connection with STUN fallback for internet NAT traversal.
         pc = new RTCPeerConnection({
-          iceServers: []  // No STUN servers - uses local/VPN IPs only
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
         });
 
         // Set up event handlers
