@@ -58,8 +58,8 @@ cat > /etc/turnserver.conf <<EOF
 # SecureVoice coturn config
 listening-port=3478
 fingerprint
-use-auth-secret
-static-auth-secret=${TURN_PASSWORD}
+lt-cred-mech
+user=${TURN_USERNAME}:${TURN_PASSWORD}
 realm=${TURN_REALM}
 server-name=${TURN_REALM}
 
@@ -83,9 +83,6 @@ EOF
 
 mkdir -p /var/log/turnserver
 chown turnserver:turnserver /var/log/turnserver
-
-# Create a long-term test user as well (helpful for manual validation).
-turnadmin -a -u "$TURN_USERNAME" -p "$TURN_PASSWORD" -r "$TURN_REALM"
 
 echo "[4/5] Restarting coturn..."
 systemctl enable coturn

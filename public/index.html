@@ -688,8 +688,14 @@
             pc.close();
             pc = null;
           }
-          document.getElementById('localVideo').srcObject = null;
-          document.getElementById('remoteVideo').srcObject = null;
+          const localVideo = document.getElementById('localVideo');
+          const remoteVideo = document.getElementById('remoteVideo');
+          if (localVideo) {
+            localVideo.srcObject = null;
+          }
+          if (remoteVideo) {
+            remoteVideo.srcObject = null;
+          }
           resetCallState();
           updateCallStatus('idle', 'Call ended by other user');
           showSuccess('Call ended');
@@ -704,7 +710,7 @@
             showSuccess('Other user disabled video');
             // Clear remote video display
             const remoteVideo = document.getElementById('remoteVideo');
-            if (remoteVideo.srcObject) {
+            if (remoteVideo && remoteVideo.srcObject) {
               remoteVideo.srcObject.getVideoTracks().forEach(track => {
                 track.enabled = false;
               });
@@ -1154,7 +1160,9 @@
         pc.ontrack = (event) => {
           console.log('✅ Receiving remote audio stream');
           const remoteAudio = document.getElementById('remoteAudio');
-          remoteAudio.srcObject = event.streams[0];
+          if (remoteAudio) {
+            remoteAudio.srcObject = event.streams[0];
+          }
           document.getElementById('remoteAudioIndicator').classList.add('active');
         };
 
@@ -1280,7 +1288,9 @@
           pc.ontrack = (event) => {
             console.log('✅ Receiving encrypted audio stream');
             const remoteAudio = document.getElementById('remoteAudio');
-            remoteAudio.srcObject = event.streams[0];
+            if (remoteAudio) {
+              remoteAudio.srcObject = event.streams[0];
+            }
             document.getElementById('remoteAudioIndicator').classList.add('active');
           };
 
@@ -1456,7 +1466,9 @@
         pc.ontrack = (event) => {
           console.log('✅ Receiving encrypted audio stream');
           const remoteAudio = document.getElementById('remoteAudio');
-          remoteAudio.srcObject = event.streams[0];
+          if (remoteAudio) {
+            remoteAudio.srcObject = event.streams[0];
+          }
           document.getElementById('remoteAudioIndicator').classList.add('active');
         };
 
