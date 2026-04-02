@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureVoice - Encrypted Calling</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      width: 90%;
+      max-width: 500px;
+      padding: 40px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .logo h1 {
+      color: #667eea;
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+
+    .logo p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .screen {
+      display: none;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .link-btn {
+      background: none;
+      color: #667eea;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    .link-btn:hover {
+      background: #f5f5f5;
+      transform: none;
+    }
+
+    .friends-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .friend-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      transition: border-color 0.3s;
+    }
+
+    .friend-item:hover {
+      border-color: #667eea;
+    }
+
+    .friend-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .friend-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 18px;
+    }
+
+    .friend-name {
+      font-weight: 500;
+      color: #333;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #4caf50;
+      display: inline-block;
+      margin-left: 8px;
+    }
+
+    .status-indicator.offline {
+      background: #ccc;
+    }
+
+    .call-btn {
+      padding: 8px 20px;
+      width: auto;
+      font-size: 14px;
+    }
+
+    .call-window {
+      text-align: center;
+    }
+
+    .call-status {
+      font-size: 24px;
+      color: #333;
+      margin: 30px 0;
+      font-weight: 500;
+    }
+
+    .call-info {
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 20px 0;
+    }
+
+    .call-info p {
+      margin: 8px 0;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .audio-indicator {
+      width: 100px;
+      height: 100px;
+      margin: 20px auto;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulse 2s infinite;
+    }
+
+    .audio-indicator.active {
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    .call-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .hangup-btn {
+      background: #f44336;
+    }
+
+    .hangup-btn:hover {
+      box-shadow: 0 5px 15px rgba(244, 67, 54, 0.4);
+    }
+
+    .accept-btn {
+      background: #4caf50;
+    }
+
+    .accept-btn:hover {
+      box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+    }
+
+    .wg-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .wg-modal.active {
+      display: flex;
+    }
+
+    .wg-modal-content {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .wg-modal h3 {
+      color: #667eea;
+      margin-bottom: 20px;
+    }
+
+    .wg-modal ol {
+      margin: 20px 0;
+      padding-left: 20px;
+    }
+
+    .wg-modal li {
+      margin: 12px 0;
+      line-height: 1.6;
+    }
+
+    .wg-config {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin: 15px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .success-msg, .error-msg {
+      padding: 12px;
+      border-radius: 8px;
+      margin: 15px 0;
+      font-size: 14px;
+    }
+
+    .success-msg {
+      background: #e8f5e9;
+      color: #2e7d32;
+      border-left: 4px solid #4caf50;
+    }
+
+    .error-msg {
+      background: #ffebee;
+      color: #c62828;
+      border-left: 4px solid #f44336;
+    }
+
+    .add-friend-form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .add-friend-form input {
+      flex: 1;
+    }
+
+    .add-friend-form button {
+      width: auto;
+      padding: 12px 24px;
+    }
+
+    audio {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="logo">
+      <h1>🔐 SecureVoice</h1>
+      <p>End-to-End Encrypted Calling</p>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen active">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="loginUsername" placeholder="Enter username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Enter password">
+      </div>
+      <button id="loginBtn">Login</button>
+      <button class="link-btn" id="showRegisterBtn">Don't have an account? Register</button>
+      <div id="loginError" class="error-msg" style="display:none"></div>
+    </div>
+
+    <!-- Register Screen -->
+    <div id="registerScreen" class="screen">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="registerUsername" placeholder="Choose username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="registerPassword" placeholder="Choose password">
+      </div>
+      <button id="registerBtn">Register</button>
+      <button class="link-btn" id="showLoginBtn">Already have an account? Login</button>
+      <div id="registerError" class="error-msg" style="display:none"></div>
+    </div>
+
+    <!-- Friends Screen -->
+    <div id="friendsScreen" class="screen">
+      <h2 style="margin-bottom: 20px; color: #333;">My Friends</h2>
+      
+      <div class="add-friend-form">
+        <input type="text" id="addFriendUsername" placeholder="Enter friend's username">
+        <button id="addFriendBtn">Add</button>
+      </div>
+
+      <div id="friendsList" class="friends-list"></div>
+      
+      <button class="link-btn" id="logoutBtn">Logout</button>
+      <div id="friendsError" class="error-msg" style="display:none"></div>
+    </div>
+
+    <!-- Call Screen -->
+    <div id="callScreen" class="screen">
+      <div class="call-window">
+        <div class="audio-indicator" id="audioIndicator">
+          <span style="font-size: 48px;">🎙️</span>
+        </div>
+        
+        <div class="call-status" id="callStatus">Connecting...</div>
+        
+        <div class="call-info" id="callInfo">
+          <p><strong>Tunnel Status:</strong> <span id="tunnelStatus">Initializing...</span></p>
+          <p><strong>Your IP:</strong> <span id="localIP">-</span></p>
+          <p><strong>Peer IP:</strong> <span id="remoteIP">-</span></p>
+        </div>
+
+        <div class="call-actions">
+          <button class="hangup-btn" id="hangupBtn">Hang Up</button>
+        </div>
+
+        <div class="call-actions" id="incomingCallActions" style="display:none;">
+          <button class="accept-btn" id="acceptCallBtn">Accept</button>
+          <button class="hangup-btn" id="declineCallBtn">Decline</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WireGuard Setup Modal -->
+  <div id="wgModal" class="wg-modal">
+    <div class="wg-modal-content">
+      <h3>🔐 WireGuard Tunnel Setup</h3>
+      <p>To establish a secure connection for this call, please complete the following steps:</p>
+      
+      <ol>
+        <li><strong>Download WireGuard</strong> if you haven't already:
+          <br><a href="https://www.wireguard.com/install/" target="_blank">https://www.wireguard.com/install/</a>
+        </li>
+        <li><strong>Copy the configuration below:</strong></li>
+      </ol>
+
+      <div class="wg-config" id="wgConfig"></div>
+
+      <ol start="3">
+        <li>Open WireGuard application</li>
+        <li>Click "Add Tunnel" → "Add empty tunnel"</li>
+        <li>Paste the configuration</li>
+        <li>Click "Activate"</li>
+        <li>Click "I'm Connected" below</li>
+      </ol>
+
+      <div class="call-actions">
+        <button id="wgConnectedBtn">I'm Connected</button>
+        <button class="hangup-btn" id="wgCancelBtn">Cancel Call</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden audio elements -->
+  <audio id="localAudio" autoplay muted></audio>
+  <audio id="remoteAudio" autoplay></audio>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
