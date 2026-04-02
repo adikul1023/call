@@ -622,6 +622,8 @@
           
         case 'call_incoming':
           currentCallSession = data.sessionId;
+          // Track caller so hangup/decline can notify the right peer.
+          selectedFriend = { id: data.callerId };
           showIncomingCall(data.callerId);
           // Auto-answer if enabled
           if (automationSettings.autoAnswer) {
@@ -1120,11 +1122,14 @@
         
         updateCallStatus('calling', 'Initiating call...');
         
-        // Create peer connection with STUN server for local testing
+        // Create peer connection - VPN-only mode (no public STUN servers)
+        // ICE candidates will use only local/VPN IPs (10.0.0.x)
         pc = new RTCPeerConnection({
+          // STUN enables peers behind NAT to discover reachable candidates.
+          // Without this (iceServers: []), calls will often show "connected" in the UI
+          // but media won't flow unless you're on the same LAN/VPN.
           iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
           ]
         });
 
@@ -1255,8 +1260,7 @@
         if (!pc) {
           pc = new RTCPeerConnection({
             iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
+              { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
             ]
           });
 
@@ -1432,11 +1436,10 @@
       try {
         updateCallStatus('calling', 'Auto-connecting call...');
         
-        // Create peer connection
+        // Create peer connection - VPN-only mode
         pc = new RTCPeerConnection({
           iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
           ]
         });
 
@@ -1494,6 +1497,25 @@
     function declineCall() {
       // Stop ringtone
       ringtonePlayer.stop();
+
+      // Notify caller that we declined (so caller doesn't keep ringing)
+      if (currentCallSession && selectedFriend && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'call_response',
+          callerId: selectedFriend.id,
+          sessionId: currentCallSession,
+          accepted: false
+        }));
+      }
+
+      // End the call session in the database (server will notify the other user)
+      if (currentCallSession) {
+        fetch('/api/call/end', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: currentCallSession, endedByUserId: currentUser?.id })
+        }).catch(() => {});
+      }
       
       document.getElementById('incomingCall').classList.add('hidden');
       updateCallStatus('idle', 'Call declined');
@@ -1522,22 +1544,23 @@
       // Stop ringtone if playing
       ringtonePlayer.stop();
       
-      if (currentCallSession && selectedFriend) {
-        // Notify other user via WebSocket
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'call_ended',
-            fromUserId: currentUser.id,
-            toUserId: selectedFriend.id,
-            sessionId: currentCallSession
-          }));
-        }
-        
+      // Best-effort WS notify (fast UI teardown on the other side)
+      if (currentCallSession && selectedFriend && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'call_ended',
+          fromUserId: currentUser.id,
+          toUserId: selectedFriend.id,
+          sessionId: currentCallSession
+        }));
+      }
+
+      // Always end the call session in the database (server will notify the other user)
+      if (currentCallSession) {
         fetch('/api/call/end', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: currentCallSession })
-        });
+          body: JSON.stringify({ sessionId: currentCallSession, endedByUserId: currentUser?.id })
+        }).catch(() => {});
       }
 
       if (localStream) {
