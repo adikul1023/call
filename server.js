@@ -139,6 +139,35 @@ wss.on('connection', (ws, req) => {
         connectedUsers.delete(userId);
         updateUserOnlineStatus(userId, false);
         console.log(`User ${userId} disconnected`);
+
+        // If a user disconnects mid-call (tab close / network issue), end the call
+        // and notify the peer so they don't stay stuck "in call".
+        db.all(
+          `SELECT * FROM call_sessions
+           WHERE status IN ('initiated', 'accepted')
+             AND (caller_id = ? OR callee_id = ?)`,
+          [userId, userId],
+          (err, calls) => {
+            if (err || !calls) return;
+
+            calls.forEach((call) => {
+              db.run(
+                'UPDATE call_sessions SET status = ?, ended_at = CURRENT_TIMESTAMP WHERE id = ? AND status != ?',
+                ['ended', call.id, 'ended']
+              );
+
+              const otherUserId = call.caller_id === userId ? call.callee_id : call.caller_id;
+              const otherUserConnection = connectedUsers.get(otherUserId);
+              if (otherUserConnection && otherUserConnection.readyState === WebSocket.OPEN) {
+                otherUserConnection.send(JSON.stringify({
+                  type: 'call_ended',
+                  fromUserId: userId,
+                  sessionId: call.id
+                }));
+              }
+            });
+          }
+        );
         break;
       }
     }
