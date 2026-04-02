@@ -33,6 +33,11 @@ A modern, secure voice calling application with database authentication, user ma
 - Node.js (v14 or higher)
 - npm or yarn
 
+### AWS TURN Relay (for WebRTC audio over NAT)
+- Run the script: `sudo bash setup-turn-aws.sh`
+- Script path: `setup-turn-aws.sh`
+- It installs coturn and prints the `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL`, and `WEBRTC_FORCE_RELAY` values to set on the app server.
+
 ### 1. Install Dependencies
 ```bash
 npm install
@@ -178,6 +183,9 @@ SecureVoice/
    - Ensure HTTPS in production
    - Check firewall settings
    - Verify STUN server availability
+   - If you are using `ssh -L` to reach the UI, remember that SSH only forwards TCP. WebRTC audio still needs a direct UDP path, a WireGuard VPN, or a TURN relay.
+   - For NAT traversal on AWS, run a TURN server such as coturn and set `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL`, and `WEBRTC_FORCE_RELAY=1` on the app server.
+   - Open the TURN ports in the AWS security group: `3478/tcp`, `3478/udp`, and your coturn relay port range.
 
 4. **WebSocket Connection Failed**
    - Check if port 8080 is available

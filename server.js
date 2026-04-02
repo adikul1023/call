@@ -33,6 +33,43 @@ try {
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.get('/runtime-config.js', (req, res) => {
+  const iceServers = [];
+  const turnUrls = process.env.TURN_URLS || process.env.TURN_URL;
+  const turnUsername = process.env.TURN_USERNAME;
+  const turnCredential = process.env.TURN_CREDENTIAL;
+
+  if (turnUrls) {
+    let urls = [];
+
+    try {
+      urls = turnUrls.startsWith('[')
+        ? JSON.parse(turnUrls)
+        : turnUrls.split(',').map((url) => url.trim()).filter(Boolean);
+    } catch (error) {
+      console.warn('⚠️  Failed to parse TURN_URLS/TURN_URL, falling back to direct STUN mode:', error.message);
+    }
+
+    urls.forEach((url) => {
+      const server = { urls: url };
+      if (turnUsername) {
+        server.username = turnUsername;
+      }
+      if (turnCredential) {
+        server.credential = turnCredential;
+      }
+      iceServers.push(server);
+    });
+  }
+
+  const runtimeConfig = {
+    iceServers,
+    iceTransportPolicy: process.env.WEBRTC_FORCE_RELAY === '1' ? 'relay' : undefined
+  };
+
+  res.set('Cache-Control', 'no-store');
+  res.type('application/javascript').send(`window.__WEBRTC_CONFIG__ = ${JSON.stringify(runtimeConfig)};`);
+});
 app.use(express.static('public'));
 
 // Database setup

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SecureVoice - Secure Voice Calling</title>
+  <script src="/runtime-config.js"></script>
   <style>
     * {
       margin: 0;
@@ -1112,6 +1113,30 @@
       updateCallStatus('ready', `Selected: ${friendName}. Click "Start Call" to begin.`);
     }
 
+    function getPeerConnectionConfig() {
+      const runtimeConfig = window.__WEBRTC_CONFIG__ || {};
+      const hasRelayServers = Array.isArray(runtimeConfig.iceServers) && runtimeConfig.iceServers.length > 0;
+
+      if (hasRelayServers) {
+        return {
+          iceServers: runtimeConfig.iceServers,
+          iceTransportPolicy: runtimeConfig.iceTransportPolicy || 'relay'
+        };
+      }
+
+      // Keep the existing direct-connection fallback for local/VPN testing.
+      return {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
+    }
+
+    function createPeerConnection() {
+      return new RTCPeerConnection(getPeerConnectionConfig());
+    }
+
     // WebRTC functions
     async function startCall() {
       if (!selectedFriend) return;
@@ -1123,12 +1148,7 @@
         updateCallStatus('calling', 'Initiating call...');
         
         // Create peer connection with STUN fallback for internet NAT traversal.
-        pc = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        });
+        pc = createPeerConnection();
 
         // Set up event handlers
         pc.ontrack = (event) => {
@@ -1255,12 +1275,7 @@
       try {
         // If we don't have a peer connection yet, create one
         if (!pc) {
-          pc = new RTCPeerConnection({
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-          });
+          pc = createPeerConnection();
 
           pc.ontrack = (event) => {
             console.log('✅ Receiving encrypted audio stream');
@@ -1435,12 +1450,7 @@
         updateCallStatus('calling', 'Auto-connecting call...');
         
         // Create peer connection with STUN fallback for internet NAT traversal.
-        pc = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        });
+        pc = createPeerConnection();
 
         // Set up event handlers
         pc.ontrack = (event) => {

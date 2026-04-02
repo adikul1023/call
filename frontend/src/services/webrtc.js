@@ -14,19 +14,33 @@ class WebRTCService {
     this._disconnectTimer = null;
   }
 
+  getPeerConnectionConfig() {
+    const runtimeConfig = typeof window !== 'undefined' ? window.__WEBRTC_CONFIG__ || {} : {};
+    const hasRelayServers = Array.isArray(runtimeConfig.iceServers) && runtimeConfig.iceServers.length > 0;
+
+    if (hasRelayServers) {
+      return {
+        iceServers: runtimeConfig.iceServers,
+        iceTransportPolicy: runtimeConfig.iceTransportPolicy || 'relay'
+      };
+    }
+
+    return {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    };
+  }
+
   /**
    * Initialize WebRTC with tunnel-only mode
    */
   async initialize(tunnelIP) {
     this.tunnelIP = tunnelIP;
     
-    // Create peer connection with public STUN fallback for internet testing.
-    this.pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    });
+    // Create peer connection with TURN relay when configured, STUN fallback otherwise.
+    this.pc = new RTCPeerConnection(this.getPeerConnectionConfig());
     
     // Handle incoming tracks
     this.pc.ontrack = (event) => {
@@ -93,7 +107,7 @@ class WebRTCService {
       }
     };
     
-    console.log('✅ WebRTC initialized (STUN-enabled mode)');
+    console.log('✅ WebRTC initialized');
   }
 
   /**
