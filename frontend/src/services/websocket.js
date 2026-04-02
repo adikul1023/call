@@ -2,7 +2,8 @@
  * WebSocket Client for real-time signaling
  */
 
-const WS_URL = 'wss://13.203.160.214:3000';
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${WS_PROTOCOL}//${window.location.host}`;
 
 class WebSocketClient {
   constructor() {

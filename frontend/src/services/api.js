@@ -2,7 +2,7 @@
  * Backend API Client
  */
 
-const API_BASE = 'https://13.203.160.214:3000/api';
+const API_BASE = `${window.location.origin}/api`;
 
 class APIClient {
   constructor() {
