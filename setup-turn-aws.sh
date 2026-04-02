@@ -16,6 +16,7 @@ fi
 TURN_USERNAME="${TURN_USERNAME:-securevoice}"
 TURN_PASSWORD="${TURN_PASSWORD:-}"
 TURN_REALM="${TURN_REALM:-}"
+PRIVATE_IP="${PRIVATE_IP:-}"
 RELAY_MIN_PORT="${RELAY_MIN_PORT:-49160}"
 RELAY_MAX_PORT="${RELAY_MAX_PORT:-49200}"
 
@@ -35,10 +36,19 @@ if [ -z "$TURN_REALM" ]; then
   exit 1
 fi
 
+if [ -z "$PRIVATE_IP" ]; then
+  PRIVATE_IP="$(hostname -I | awk '{print $1}')"
+fi
+if [ -z "$PRIVATE_IP" ]; then
+  echo "Could not determine private IP. Set PRIVATE_IP and rerun."
+  exit 1
+fi
+
 echo "========================================"
 echo "SecureVoice TURN Setup (coturn)"
 echo "========================================"
 echo "Realm/IP: $TURN_REALM"
+echo "Private IP: $PRIVATE_IP"
 echo "Relay range: $RELAY_MIN_PORT-$RELAY_MAX_PORT"
 echo ""
 
@@ -62,10 +72,12 @@ lt-cred-mech
 user=${TURN_USERNAME}:${TURN_PASSWORD}
 realm=${TURN_REALM}
 server-name=${TURN_REALM}
+cli-password=${TURN_PASSWORD}
 
 # Better NAT behavior and dual transport support
 listening-ip=0.0.0.0
-external-ip=${TURN_REALM}
+relay-ip=${PRIVATE_IP}
+external-ip=${TURN_REALM}/${PRIVATE_IP}
 no-multicast-peers
 
 # Relay ports for media
